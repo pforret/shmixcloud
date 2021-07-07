@@ -8,7 +8,7 @@
 
 # shmixcloud
 
-![shmixcloud](https://github.com/pforret/splashmark/raw/master/examples/size_github.jpg)
+![shmixcloud](assets/shmixcloud.jpg)
 
 Download Mixcloud shows to disk to be used in e.g. car
 
@@ -33,8 +33,8 @@ Flags, options and parameters:
 ## ⚡️ Examples
 
 ```bash
-> shmixcloud .
-# start PhpStorm with current folder as project
+$ shmixcloud https://www.mixcloud.com/djsupermarkt_tooslowtd/
+$ shmixcloud https://www.mixcloud.com/djsupermarkt_tooslowtd/
 ```
 
 ## 🚀 Installation

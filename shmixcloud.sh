@@ -1,12 +1,4 @@
 #!/usr/bin/env bash
-### ==============================================================================
-### SO HOW DO YOU PROCEED WITH YOUR SCRIPT?
-### 1. define the options/parameters and defaults you need in list_options()
-### 2. define dependencies on other programs/scripts in list_dependencies()
-### 3. implement the different actions in main() with helper functions
-### 4. implement helper functions you defined in previous step
-### ==============================================================================
-
 ### Created by Peter Forret ( pforret ) on 2021-07-07
 ### Based on https://github.com/pforret/bashew 1.16.5
 script_version="0.0.1" # if there is a VERSION.md in this script's folder, it will take priority for version number
@@ -15,25 +7,6 @@ readonly script_created="2021-07-07"
 readonly run_as_root=-1 # run_as_root: 0 = don't check anything / 1 = script MUST run as root / -1 = script MAY NOT run as root
 
 list_options() {
-  ### Change the next lines to reflect which flags/options/parameters you need
-  ### flag:   switch a flag 'on' / no value specified
-  ###     flag|<short>|<long>|<description>
-  ###     e.g. "-v" or "--verbose" for verbose output / default is always 'off'
-  ###     will be available as $<long> in the script e.g. $verbose
-  ### option: set an option / 1 value specified
-  ###     option|<short>|<long>|<description>|<default>
-  ###     e.g. "-e <extension>" or "--extension <extension>" for a file extension
-  ###     will be available a $<long> in the script e.g. $extension
-  ### list: add an list/array item / 1 value specified
-  ###     list|<short>|<long>|<description>| (default is ignored)
-  ###     e.g. "-u <user1> -u <user2>" or "--user <user1> --user <user2>"
-  ###     will be available a $<long> array in the script e.g. ${user[@]}
-  ### param:  comes after the options
-  ###     param|<type>|<long>|<description>
-  ###     <type> = 1 for single parameters - e.g. param|1|output expects 1 parameter <output>
-  ###     <type> = ? for optional parameters - e.g. param|1|output expects 1 parameter <output>
-  ###     <type> = n for list parameter    - e.g. param|n|inputs expects <input1> <input2> ... <input99>
-  ###     will be available as $<long> in the script after option/param parsing
   echo -n "
 #commented lines will be filtered
 flag|h|help|show usage
@@ -42,8 +15,10 @@ flag|v|verbose|output more
 flag|f|force|do not ask for confirmation (always yes)
 option|l|log_dir|folder for log files |$HOME/log/$script_prefix
 option|t|tmp_dir|folder for temp files|/tmp/$script_prefix
-param|1|action|action to perform: action1/action2
-param|?|input|input file/text
+option|o|out_dir|output folder for the m4a/mp3 files (default: derive from URL)|
+option|x|max_dl|maximum downloads from this playlist|10
+param|1|action|action to perform: download/update/check
+param|?|url|Mixcloud URL of a user or a playlist
 " | grep -v '^#' | grep -v '^\s*$'
 }
 
@@ -56,11 +31,11 @@ main() {
 
   action=$(lower_case "$action")
   case $action in
-  action1)
-    #TIP: use «$script_prefix action1» to ...
-    #TIP:> $script_prefix action1 input.txt
+  download)
+    #TIP: use «$script_prefix download URL» to download all audio files
+    #TIP:> $script_prefix download https://www.mixcloud.com/DjBlasto/playlists/discosauro/
     # shellcheck disable=SC2154
-    do_action1 "$input"
+    do_download "$url"
     ;;
 
   action2)
@@ -100,20 +75,75 @@ main() {
 ## Put your helper scripts here
 #####################################################################
 
-do_action1() {
-  log_to_file "action1 [$input]"
-  # Examples of required binaries/scripts and how to install them
-  # require_binary "convert" "imagemagick"
-  # require_binary "progressbar" "basher install pforret/progressbar"
-  # (code)
+function do_download() {
+  log_to_file "download [$1]"
+  require_binary "youtube-dl"
+  require_binary "AtomicParsley"
+
+  playlist=$(basename "$1")
+  username=$(echo "$1" | cut -d/ -f4)
+  if [[ -z "$out_dir" ]] ; then
+    if [[ "$playlist" == "$username" ]] ; then
+      out_dir="./$playlist"
+    else
+      out_dir="./$username/$playlist"
+    fi
+  fi
+  debug "Output folder = [$out_dir]"
+  [[ ! -d $out_dir ]] && mkdir -p "$out_dir" && log_to_file "Create output folder [$out_dir]"
+  pushd "$out_dir" &> /dev/null || die "Cannot cd to [$out_dir]"
+  download_log="$log_dir/download.$playlist.log"
+  debug "Download log in [$download_log]"
+    # shellcheck disable=SC2154
+  youtube-dl \
+    --max-downloads "$max_dl" \
+    --no-overwrites \
+    --no-progress \
+    --write-thumbnail \
+    "$1" &> "$download_log"
+
+  for m4a_file in *.m4a ; do
+    echo "$m4a_file"
+    title=$(basename "$m4a_file" .m4a | sed 's|[_-]| |g')
+    title=$(title_case "$title" " "| remove_duplicate_words)
+    debug "[$m4a_file] => [$title]"
+    echo "## $m4a_file" &>> "$download_log"
+    AtomicParsley "$m4a_file" \
+      --overWrite \
+      --artist "$username" \
+      --title "$title" \
+      --album "Mixcloud: $playlist" \
+      --podcastURL "$url" \
+      --comment "Created with $script_basename" \
+       &>> "$download_log"
+
+      image_file=$(basename "$m4a_file" .m4a).jpg
+      [[ -f "$image_file" ]] && AtomicParsley "$m4a_file" --overWrite --artwork "$image_file" \
+       &>> "$download_log"
+  done
+
+  popd &> /dev/null || die "Cannot return to current folder"
+
 }
 
-do_action2() {
-  log_to_file "action2 [$input]"
-  # (code)
-
+function remove_duplicate_words(){
+  awk '{
+   split($0,arr," ");
+   c=0;
+   for (v in arr) c++;
+   for (m=c;m >= 1;m--)
+     for (n=1; n<m;n++)
+        if (arr[m] == arr[n])
+           delete arr[m];
+   str="";
+   for (k=1;k<=c;k++)
+   {
+      if (arr[k] != "")
+          str=str""arr[k]" "
+    }
+    print substr(str,1,length(str)-1)
+   }'
 }
-
 
 #####################################################################
 ################### DO NOT MODIFY BELOW THIS LINE ###################
