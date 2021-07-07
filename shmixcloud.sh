@@ -92,6 +92,7 @@ function do_download() {
   debug "Output folder = [$out_dir]"
   [[ ! -d $out_dir ]] && mkdir -p "$out_dir" && log_to_file "Create output folder [$out_dir]"
   pushd "$out_dir" &> /dev/null || die "Cannot cd to [$out_dir]"
+    # shellcheck disable=SC2154
   download_log="$log_dir/download.$playlist.log"
   debug "Download log in [$download_log]"
     # shellcheck disable=SC2154
