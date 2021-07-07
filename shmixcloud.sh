@@ -94,6 +94,14 @@ function do_download() {
   debug "Output folder = [$out_dir]"
   [[ ! -d $out_dir ]] && mkdir -p "$out_dir" && log_to_file "Create output folder [$out_dir]"
   pushd "$out_dir" &> /dev/null || die "Cannot cd to [$out_dir]"
+
+  if [[ ! $force -gt 0 ]] ; then
+    find . -mtime +1 -name "$playlist.done" -exec rm {} \;
+    if [[ -f "$playlist.done" ]] ; then
+      out "Last download was less than 24h ago. use -f to force download anyway"
+      safe_exit
+    fi
+  fi
     # shellcheck disable=SC2154
   download_log="$log_dir/download.$playlist.log"
   debug "Download log in [$download_log]"
@@ -128,6 +136,8 @@ function do_download() {
         --artwork "$image_file" \
         &>> "$download_log"
   done
+
+  touch "$playlist.done"
 
   popd &> /dev/null || die "Cannot return to current folder"
 
