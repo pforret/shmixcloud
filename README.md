@@ -10,7 +10,7 @@
 
 ![shmixcloud](assets/shmixcloud.jpg)
 
-- Download Mixcloud shows to disk to be used in on USB stick in the car
+- Download Mixcloud shows to disk to be used on USB stick for e.g. 🚗 (tested on BMW X1 😉)
 - download N most recent shows (default: 10)
 - add Title, Author, Album, Image to (M4A) audio file
 
@@ -42,6 +42,9 @@ $ shmixcloud download https://www.mixcloud.com/djsupermarkt_tooslowtd/
 $ shmixcloud -x 20 download https://www.mixcloud.com/DjBlasto/playlists/discosauro/
 # files will be stored in ./DjBlasto/discosauro/
 ```
+
+File info (Apple+I) will look like this:\
+![](assets/apple_info.png)
 
 ## 🚀 Installation
 
