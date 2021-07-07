@@ -104,7 +104,7 @@ function do_download() {
     "$1" &> "$download_log"
 
   for m4a_file in *.m4a ; do
-    echo "$m4a_file"
+    out "$m4a_file"
     title=$(basename "$m4a_file" .m4a | sed 's|[_-]| |g')
     title=$(title_case "$title" " "| remove_duplicate_words)
     debug "[$m4a_file] => [$title]"
