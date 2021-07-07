@@ -17,6 +17,7 @@ option|l|log_dir|folder for log files |$HOME/log/$script_prefix
 option|t|tmp_dir|folder for temp files|/tmp/$script_prefix
 option|o|out_dir|output folder for the m4a/mp3 files (default: derive from URL)|
 option|x|max_dl|maximum downloads from this playlist|10
+option|a|audio|audio format to use|m4a
 param|1|action|action to perform: download/update/check
 param|?|url|Mixcloud URL of a user or a playlist
 " | grep -v '^#' | grep -v '^\s*$'
@@ -80,8 +81,9 @@ function do_download() {
   require_binary "youtube-dl"
   require_binary "AtomicParsley"
 
-  playlist=$(basename "$1")
   username=$(echo "$1" | cut -d/ -f4)
+  playlist=$(basename "$1")
+  [[ "$playlist" == "uploads" ]] && playlist=$username
   if [[ -z "$out_dir" ]] ; then
     if [[ "$playlist" == "$username" ]] ; then
       out_dir="./$playlist"
@@ -100,16 +102,18 @@ function do_download() {
     --max-downloads "$max_dl" \
     --no-overwrites \
     --no-progress \
+    --extract-audio --audio-format "$audio" \
     --write-thumbnail \
     "$1" &> "$download_log"
 
-  for m4a_file in *.m4a ; do
-    out "$m4a_file"
-    title=$(basename "$m4a_file" .m4a | sed 's|[_-]| |g')
+    # shellcheck disable=SC2154
+  for audio_file in *."$audio" ; do
+    out "$audio_file"
+    title=$(basename "$audio_file" ."$audio" | sed 's|[_-]| |g')
     title=$(title_case "$title" " "| remove_duplicate_words)
-    debug "[$m4a_file] => [$title]"
-    echo "## $m4a_file" &>> "$download_log"
-    AtomicParsley "$m4a_file" \
+    debug "[$audio_file] => [$title]"
+    echo "## $audio_file" &>> "$download_log"
+    AtomicParsley "$audio_file" \
       --overWrite \
       --artist "$username" \
       --title "$title" \
@@ -118,9 +122,11 @@ function do_download() {
       --comment "Created with $script_basename" \
        &>> "$download_log"
 
-      image_file=$(basename "$m4a_file" .m4a).jpg
-      [[ -f "$image_file" ]] && AtomicParsley "$m4a_file" --overWrite --artwork "$image_file" \
-       &>> "$download_log"
+      image_file=$(basename "$audio_file" ."$audio").jpg
+      [[ -f "$image_file" ]] && AtomicParsley "$audio_file" \
+        --overWrite \
+        --artwork "$image_file" \
+        &>> "$download_log"
   done
 
   popd &> /dev/null || die "Cannot return to current folder"
@@ -278,7 +284,7 @@ title_case() {
           print $0;
           }' |
         sed "s/ /$separator/g" |
-        cut -c1-50
+        cut -c1-70
 }
 
 ### interactive
