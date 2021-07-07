@@ -121,20 +121,27 @@ function do_download() {
     title=$(title_case "$title" " "| remove_duplicate_words)
     debug "[$audio_file] => [$title]"
     echo "## $audio_file" &>> "$download_log"
-    AtomicParsley "$audio_file" \
-      --overWrite \
-      --artist "$username" \
-      --title "$title" \
-      --album "Mixcloud: $playlist" \
-      --podcastURL "$url" \
-      --comment "Created with $script_basename" \
-       &>> "$download_log"
-
-      image_file=$(basename "$audio_file" ."$audio").jpg
-      [[ -f "$image_file" ]] && AtomicParsley "$audio_file" \
+    image_file=$(basename "$audio_file" ."$audio").jpg
+    if [[ -f "$image_file" ]] ; then
+      AtomicParsley "$audio_file" \
         --overWrite \
+        --artist "$username" \
+        --title "$title" \
+        --album "Mixcloud: $playlist" \
+        --podcastURL "$url" \
         --artwork "$image_file" \
-        &>> "$download_log"
+        --comment "Created with $script_basename" \
+         &>> "$download_log"
+    else
+      AtomicParsley "$audio_file" \
+        --overWrite \
+        --artist "$username" \
+        --title "$title" \
+        --album "Mixcloud: $playlist" \
+        --podcastURL "$url" \
+        --comment "Created with $script_basename" \
+         &>> "$download_log"
+    fi
   done
 
   touch "$playlist.done"
