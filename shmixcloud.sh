@@ -123,6 +123,7 @@ function do_download() {
     echo "## $audio_file" &>> "$download_log"
     image_file=$(basename "$audio_file" ."$audio").jpg
     if [[ -f "$image_file" ]] ; then
+      debug "Write metadata and image"
       AtomicParsley "$audio_file" \
         --overWrite \
         --artist "$username" \
@@ -133,6 +134,7 @@ function do_download() {
         --comment "Created with $script_basename" \
          &>> "$download_log"
     else
+      debug "Write metadata -- no image"
       AtomicParsley "$audio_file" \
         --overWrite \
         --artist "$username" \
