@@ -88,7 +88,7 @@ function do_download() {
     if [[ "$playlist" == "$username" ]] ; then
       out_dir="./$playlist"
     else
-      out_dir="./$username/$playlist"
+      out_dir="./${username}•${playlist}"
     fi
   fi
   debug "Output folder = [$out_dir]"
@@ -144,7 +144,7 @@ function do_download() {
     fi
   done
 
-  touch "$playlist.done"
+  echo "$url" > "$playlist.done"
 
   popd &> /dev/null || die "Cannot return to current folder"
 
