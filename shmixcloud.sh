@@ -78,8 +78,9 @@ main() {
 
 function do_download() {
   log_to_file "download [$1]"
-  require_binary "youtube-dl"
-  require_binary "AtomicParsley"
+  require_binary youtube-dl
+  require_binary AtomicParsley
+  require_binary magick imagemagick
 
   username=$(echo "$1" | cut -d/ -f4)
   playlist=$(basename "$1")
@@ -123,14 +124,18 @@ function do_download() {
     echo "## $audio_file" &>> "$download_log"
     image_file=$(basename "$audio_file" ."$audio").jpg
     if [[ -f "$image_file" ]] ; then
-      debug "Write metadata and image"
+      temp_image="$tmp_dir/$playlist.png"
+      debug "Write metadata and image [$temp_image]"
+
+      magick "$image_file" -resize 500x500 -statistic median 3x3 -attenuate 1 +noise Gaussian -gravity south -pointsize 32 -fill white -annotate '0x0+0+5' 'pforret/shmixcloud' "$temp_image"
+
       AtomicParsley "$audio_file" \
         --overWrite \
         --artist "$username" \
         --title "$title" \
         --album "Mixcloud: $playlist" \
         --podcastURL "$url" \
-        --artwork "$image_file" \
+        --artwork "$temp_image" \
         --comment "Created with $script_basename" \
          &>> "$download_log"
     else
