@@ -17,6 +17,7 @@ option|l|log_dir|folder for log files |$HOME/log/$script_prefix
 option|t|tmp_dir|folder for temp files|/tmp/$script_prefix
 option|o|out_dir|output folder for the m4a/mp3 files (default: derive from URL)|
 option|x|max_dl|maximum downloads from this playlist|10
+option|l|length|maximum length of filename|50
 option|a|audio|audio format to use|m4a
 param|1|action|action to perform: download/update/check
 param|?|url|Mixcloud URL of a user or a playlist
@@ -133,10 +134,10 @@ function do_download() {
         --overWrite \
         --artist "$username" \
         --title "$title" \
-        --album "Mixcloud: $playlist" \
+        --album "$playlist" \
         --podcastURL "$url" \
         --artwork "$temp_image" \
-        --comment "Created with $script_basename" \
+        --comment "Created with pforret/shmixcloud" \
          &>> "$download_log"
     else
       debug "Write metadata -- no image"
@@ -144,12 +145,14 @@ function do_download() {
         --overWrite \
         --artist "$username" \
         --title "$title" \
-        --album "Mixcloud: $playlist" \
+        --album "$playlist" \
         --podcastURL "$url" \
-        --comment "Created with $script_basename" \
+        --comment "Created with pforret/shmixcloud" \
          &>> "$download_log"
     fi
+    rename_file "$audio_file" "$length"
   done
+  rm *.jpg *.png
 
   echo "$url" > "$playlist.done"
 
@@ -174,6 +177,22 @@ function remove_duplicate_words(){
     }
     print substr(str,1,length(str)-1)
    }'
+}
+
+function rename_file(){
+  local filename="$1"
+  local length="$2"
+
+  local extension="${filename##*.}"
+  if [[ "${#filename}" -gt "$length" ]] ; then
+    local md
+    local cutoff
+    md=$(echo $filename | hash 4)
+    cutoff=$((length - 5))
+    new_name=$(echo "$filename" | cut -c1-$cutoff).$md.$extension
+    debug "New name is now $new_name"
+    mv "$filename" "$new_name"
+  fi
 }
 
 #####################################################################
