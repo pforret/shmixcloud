@@ -148,7 +148,7 @@ function do_download() {
       fi
 
       if [[ -n "$subtitle" ]] ; then
-        magick "$temp_image" -gravity south -pointsize 24 -font Arial-Narrow -fill white -annotate '0x0+0+5' 'pforret/shmixcloud' "$temp_image.temp.png"
+        magick "$temp_image" -gravity south -pointsize 24 -font Arial-Narrow -fill black -annotate '0x0+0+5' 'pforret/shmixcloud' "$temp_image.temp.png"
         mv "$temp_image.temp.png" "$temp_image"
       fi
 
