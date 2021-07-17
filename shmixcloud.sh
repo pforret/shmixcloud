@@ -13,12 +13,15 @@ flag|h|help|show usage
 flag|q|quiet|no output
 flag|v|verbose|output more
 flag|f|force|do not ask for confirmation (always yes)
+flag|Q|qrcode|add QR encode of URL to image
 option|l|log_dir|folder for log files |$HOME/log/$script_prefix
 option|t|tmp_dir|folder for temp files|/tmp/$script_prefix
 option|o|out_dir|output folder for the m4a/mp3 files (default: derive from URL)|
-option|x|max_dl|maximum downloads from this playlist|10
-option|l|length|maximum length of filename|50
+option|n|number|maximum downloads from this playlist|10
+option|l|length|maximum length of filename|60
+option|p|pixels|resolution image (width/height in pixels)|500
 option|a|audio|audio format to use|m4a
+option|s|subtitle|subtitle for the image|pforret/shmixcloud
 param|1|action|action to perform: download/update/check
 param|?|url|Mixcloud URL of a user or a playlist
 " | grep -v '^#' | grep -v '^\s*$'
@@ -83,6 +86,9 @@ function do_download() {
   require_binary AtomicParsley
   require_binary magick imagemagick
 
+  # shellcheck disable=SC2154
+  local image_dimensions="${pixels}x${pixels}"
+
   username=$(echo "$1" | cut -d/ -f4)
   playlist=$(basename "$1")
   [[ "$playlist" == "uploads" ]] && playlist=$username
@@ -107,9 +113,10 @@ function do_download() {
     # shellcheck disable=SC2154
   download_log="$log_dir/download.$playlist.log"
   debug "Download log in [$download_log]"
+
     # shellcheck disable=SC2154
   youtube-dl \
-    --max-downloads "$max_dl" \
+    --max-downloads "$number" \
     --no-overwrites \
     --no-progress \
     --extract-audio --audio-format "$audio" \
@@ -125,10 +132,25 @@ function do_download() {
     echo "## $audio_file" &>> "$download_log"
     image_file=$(basename "$audio_file" ."$audio").jpg
     if [[ -f "$image_file" ]] ; then
-      temp_image="$tmp_dir/$playlist.png"
+      temp_image="./$playlist.png"
       debug "Write metadata and image [$temp_image]"
 
-      magick "$image_file" -resize 500x500 -statistic median 3x3 -attenuate 1 +noise Gaussian -gravity south -pointsize 32 -fill white -annotate '0x0+0+5' 'pforret/shmixcloud' "$temp_image"
+      magick "$image_file" -resize "$image_dimensions" -statistic median 3x3 -attenuate 1 +noise Gaussian "$temp_image"
+
+      if [[ $qrcode -gt 0 ]] ; then
+        require_binary qrencode
+        local qr_orig="./url_orig.jpg"
+        qrencode -o "$qr_orig" -m 10 -s 25 "$1"
+        local qr_prep="./url_prep.jpg"
+        magick "$qr_orig" -resize "$image_dimensions" "$qr_prep"
+        magick "$temp_image" "$qr_prep" -compose dissolve -define compose:args=50,90 -composite "$temp_image.temp.png"
+        mv "$temp_image.temp.png" "$temp_image"
+      fi
+
+      if [[ -n "$subtitle" ]] ; then
+        magick "$temp_image" -gravity south -pointsize 24 -font Arial-Narrow -fill white -annotate '0x0+0+5' 'pforret/shmixcloud' "$temp_image.temp.png"
+        mv "$temp_image.temp.png" "$temp_image"
+      fi
 
       AtomicParsley "$audio_file" \
         --overWrite \
@@ -152,7 +174,7 @@ function do_download() {
     fi
     rename_file "$audio_file" "$length"
   done
-  rm *.jpg *.png
+  rm ./*.jpg
 
   echo "$url" > "$playlist.done"
 
@@ -187,7 +209,7 @@ function rename_file(){
   if [[ "${#filename}" -gt "$length" ]] ; then
     local md
     local cutoff
-    md=$(echo $filename | hash 4)
+    md=$(echo "$filename" | hash 4)
     cutoff=$((length - 5))
     new_name=$(echo "$filename" | cut -c1-$cutoff).$md.$extension
     debug "New name is now $new_name"
