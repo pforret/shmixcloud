@@ -14,14 +14,16 @@ flag|q|quiet|no output
 flag|v|verbose|output more
 flag|f|force|do not ask for confirmation (always yes)
 flag|Q|qrcode|add QR encode of URL to image
+option|A|audio|audio format to use|m4a
+option|F|font|font to use for subtitle|Courier
+option|L|length|maximum length of filename|60
+option|N|number|maximum downloads from this playlist|10
+option|P|pixels|resolution image (width/height in pixels)|500
+option|S|subtitle|subtitle for the image|pforret/shmixcloud
+option|T|playlist|playlist name|
 option|l|log_dir|folder for log files |$HOME/log/$script_prefix
-option|t|tmp_dir|folder for temp files|/tmp/$script_prefix
 option|o|out_dir|output folder for the m4a/mp3 files (default: derive from URL)|
-option|n|number|maximum downloads from this playlist|10
-option|l|length|maximum length of filename|60
-option|p|pixels|resolution image (width/height in pixels)|500
-option|a|audio|audio format to use|m4a
-option|s|subtitle|subtitle for the image|pforret/shmixcloud
+option|t|tmp_dir|folder for temp files|/tmp/$script_prefix
 param|1|action|action to perform: download/update/check
 param|?|url|Mixcloud URL of a user or a playlist
 " | grep -v '^#' | grep -v '^\s*$'
@@ -90,8 +92,10 @@ function do_download() {
   local image_dimensions="${pixels}x${pixels}"
 
   username=$(echo "$1" | cut -d/ -f4)
-  playlist=$(basename "$1")
-  [[ "$playlist" == "uploads" ]] && playlist=$username
+  if [[ -z "$playlist" ]] ; then
+    playlist=$(basename "$1")
+    [[ "$playlist" == "uploads" ]] && playlist=$username
+  fi
   if [[ -z "$out_dir" ]] ; then
     if [[ "$playlist" == "$username" ]] ; then
       out_dir="./$playlist"
@@ -135,20 +139,22 @@ function do_download() {
       temp_image="./$playlist.png"
       debug "Write metadata and image [$temp_image]"
 
-      magick "$image_file" -resize "$image_dimensions" -statistic median 3x3 -attenuate 1 +noise Gaussian "$temp_image"
+      magick "$image_file" -resize "$image_dimensions" -statistic median 3x3 -attenuate .5 +noise Gaussian "$temp_image"
 
       if [[ $qrcode -gt 0 ]] ; then
         require_binary qrencode
         local qr_orig="./url_orig.jpg"
-        qrencode -o "$qr_orig" -m 10 -s 25 "$1"
+        qrencode -o "$qr_orig" -m 2 -s 25 "$1"
         local qr_prep="./url_prep.jpg"
-        magick "$qr_orig" -resize "$image_dimensions" "$qr_prep"
-        magick "$temp_image" "$qr_prep" -compose dissolve -define compose:args=50,90 -composite "$temp_image.temp.png"
+        magick "$qr_orig" -resize "120x120" "$qr_prep"
+        debug "Add [$subtitle] to image $temp_image"
+        magick "$temp_image" "$qr_prep" -gravity East -compose dissolve -define compose:args=75,100 -composite "$temp_image.temp.png"
         mv "$temp_image.temp.png" "$temp_image"
       fi
 
       if [[ -n "$subtitle" ]] ; then
-        magick "$temp_image" -gravity south -pointsize 24 -font Arial-Narrow -fill black -annotate '0x0+0+5' 'pforret/shmixcloud' "$temp_image.temp.png"
+        debug "Add [$subtitle] to image $temp_image"
+        magick "$temp_image" -gravity south -pointsize 32 -font "$font" -fill black -annotate '0x0+0+5' "$subtitle" -fill white -annotate '0x0+2+6' "$subtitle"  "$temp_image.temp.png"
         mv "$temp_image.temp.png" "$temp_image"
       fi
 
@@ -174,7 +180,7 @@ function do_download() {
     fi
     rename_file "$audio_file" "$length"
   done
-  rm ./*.jpg
+  ((verbose)) || rm ./*.jpg
 
   echo "$url" > "$playlist.done"
 
