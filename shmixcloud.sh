@@ -116,6 +116,7 @@ function do_download() {
   fi
     # shellcheck disable=SC2154
   download_log="$log_dir/download.$playlist.log"
+  out "## DOWNLOAD MEDIA"
   debug "Download log in [$download_log]"
 
     # shellcheck disable=SC2154
@@ -125,23 +126,28 @@ function do_download() {
     --no-progress \
     --extract-audio --audio-format "$audio" \
     --write-thumbnail \
-    "$1" &> "$download_log"
+    "$1" | tee "$download_log" | grep -F "[download]" | sed 's/\[download\]/*/'
 
+  out "## ENRICH MEDIA"
     # shellcheck disable=SC2154
   for audio_file in *."$audio" ; do
-    out "$audio_file"
+    out "* $audio_file"
     title=$(basename "$audio_file" ."$audio" | sed 's|[_-]| |g')
     title=$(title_case "$title" " "| remove_duplicate_words)
     debug "[$audio_file] => [$title]"
     echo "## $audio_file" &>> "$download_log"
-    image_file=$(basename "$audio_file" ."$audio").jpg
-    if [[ -f "$image_file" ]] ; then
+    image_jpg=$(basename "$audio_file" ."$audio").jpg
+    image_png=$(basename "$audio_file" ."$audio").png
+    cover_image=""
+    [[ -f "$image_jpg" ]] && cover_image="$image_jpg"
+    [[ -f "$image_png" ]] && cover_image="$image_png"
+    if [[ -n "$cover_image" ]] ; then
       temp_image="./$playlist.png"
       debug "Write metadata and image [$temp_image]"
 
-      magick "$image_file" -resize "$image_dimensions" -statistic median 3x3 -attenuate .5 +noise Gaussian "$temp_image"
+      magick "$cover_image" -resize "$image_dimensions" -statistic median 3x3 -attenuate .5 +noise Gaussian "$temp_image"
 
-      if [[ $qrcode -gt 0 ]] ; then
+      if [[ "$qrcode" -gt 0 ]] ; then
         require_binary qrencode
         local qr_orig="./url_orig.jpg"
         qrencode -o "$qr_orig" -m 2 -s 25 "$1"
@@ -178,7 +184,7 @@ function do_download() {
         --comment "Created with pforret/shmixcloud" \
          &>> "$download_log"
     fi
-    rename_file "$audio_file" "$length"
+    rename_file_if_too_long "$audio_file" "$length"
   done
   ((verbose)) || rm ./*.jpg
 
@@ -207,7 +213,7 @@ function remove_duplicate_words(){
    }'
 }
 
-function rename_file(){
+function rename_file_if_too_long(){
   local filename="$1"
   local length="$2"
 
