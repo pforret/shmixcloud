@@ -126,11 +126,12 @@ function do_download() {
     --no-progress \
     --extract-audio --audio-format "$audio" \
     --write-thumbnail \
-    "$1" | tee "$download_log" | grep -F "[download]" | sed 's/\[download\]/*/'
+    "$1" | tee "$download_log" | awk '/\[download\]/ {$1="*"; print $0}'
 
   out "## ENRICH MEDIA"
     # shellcheck disable=SC2154
-  for audio_file in *."$audio" ; do
+    find . -type f -name "*.$audio" -mtime -1 \
+    | while read -r audio_file ; do
     out "* $audio_file"
     title=$(basename "$audio_file" ."$audio" | sed 's|[_-]| |g')
     title=$(title_case "$title" " "| remove_duplicate_words)
