@@ -222,7 +222,7 @@ function rename_file_if_too_long(){
   if [[ "${#filename}" -gt "$length" ]] ; then
     local md
     local cutoff
-    md=$(echo "$filename" | hash 4)
+    md=$(basename "$filename" | hash 4)
     cutoff=$((length - 5))
     new_name=$(echo "$filename" | cut -c1-$cutoff).$md.$extension
     debug "New name is now $new_name"
