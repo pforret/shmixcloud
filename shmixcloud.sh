@@ -15,12 +15,12 @@ flag|v|verbose|output more
 flag|f|force|do not ask for confirmation (always yes)
 flag|Q|qrcode|add QR encode of URL to image
 option|A|audio|audio format to use|m4a
-option|F|font|font to use for subtitle|Courier
-option|L|length|maximum length of filename|60
+option|F|font|font to use for subtitle|Georgia
+option|G|fontsize|font size|48
 option|N|number|maximum downloads from this playlist|10
 option|P|pixels|resolution image (width/height in pixels)|500
 option|S|subtitle|subtitle for the image|pforret/shmixcloud
-option|T|playlist|playlist name|
+option|I|filter|only download matching mixes|/
 option|l|log_dir|folder for log files |$HOME/log/$script_prefix
 option|o|out_dir|output folder for the m4a/mp3 files (default: derive from URL)|
 option|t|tmp_dir|folder for temp files|/tmp/$script_prefix
@@ -36,6 +36,7 @@ param|?|url|Mixcloud URL of a user or a playlist
 main() {
   log_to_file "[$script_basename] $script_version started"
 
+  # shellcheck disable=SC2154
   action=$(lower_case "$action")
   case $action in
   download)
@@ -82,7 +83,108 @@ main() {
 ## Put your helper scripts here
 #####################################################################
 
-function do_download() {
+function do_download(){
+  log_to_file "download 1-by-1 [$1]"
+  require_binary AtomicParsley
+  require_binary curl
+  require_binary jq
+  require_binary mogrify imagemagick
+  require_binary youtube-dl
+
+  local username uniq
+  local input_url="$1"
+  username=$(echo "$1" | cut -d/ -f4)
+  playlist=$(basename "$1")
+  [[ "$playlist" == "uploads" ]] && playlist=$username
+
+  uniq=$(echo "$1" | hash 8)
+  # shellcheck disable=SC2154
+  local image_dimensions="${pixels}x${pixels}"
+  # shellcheck disable=SC2154
+  local temp_json="$tmp_dir/$username.$uniq.json"
+  if [[ ! -f "$temp_json" ]] ; then
+    debug "Download JSON info to $temp_json"
+    youtube-dl -j "$1" > "$temp_json"
+  fi
+  # shellcheck disable=SC2154
+  local download_log="$log_dir/download.$uniq.log"
+
+  local mix_url mix_id mix_title mix_duration mix_date mix_file mix_uploader mix_thumb mix_count
+  mix_count=0
+  # shellcheck disable=SC2154
+  < "$temp_json" jq -r '[.webpage_url, .id, .title , .duration, .upload_date, ._filename, .uploader_id, .thumbnail ] | join("\t")' \
+  | grep -i "$filter" \
+  | while IFS=$'\t' read -r mix_url mix_id mix_title mix_duration mix_date mix_file mix_uploader mix_thumb; do
+      mix_count=$((mix_count + 1))
+      [[ $mix_count -gt $number ]] && continue
+      mix_uniq=$(echo "$mix_url" | hash 4)
+      mix_minutes=$((mix_duration / 60))
+      # shellcheck disable=SC2154
+      local mix_output="$out_dir/$mix_date.${mix_id:0:32}.$mix_uniq.$audio"
+      local mix_image="$tmp_dir/$mix_date.${mix_id:0:32}.$mix_uniq.jpg"
+      # [[ -f "$mix_output" ]] && continue
+      if [[ ! -f "$mix_output" ]] ; then
+        debug "Now downloading $mix_output ..."
+        youtube-dl \
+          --no-overwrites \
+          --no-progress \
+          --extract-audio --audio-format "$audio" \
+          -o "$mix_output" \
+          "$mix_url" >> "$download_log"
+      fi
+
+      if [[ ! -f "$mix_image" ]] ; then
+        curl -s -o "$mix_image" "$mix_thumb"
+        [[ ! -f "$mix_image" ]] && cp "$script_install_folder/assets/mixcloud.jpg" "$mix_image"
+        debug "Add noise to image $mix_image"
+        mogrify -resize "$image_dimensions" -brightness-contrast -30x10 -statistic median 3x3 -attenuate .5 +noise Gaussian "$mix_image"
+
+        if [[ "$qrcode" -gt 0 ]] ; then
+          require_binary qrencode
+          local qr_orig="$tmp_dir/qr.$uniq.jpg"
+          qrencode -o "$qr_orig" -m 2 -s 25 "$input_url"
+          mogrify -resize "200x200" "$qr_orig"
+          magick "$mix_image" "$qr_orig" -gravity East -compose dissolve -define compose:args=75,100 -composite "$mix_image.temp.png"
+          mv "$mix_image.temp.png" "$mix_image"
+          rm "$qr_orig"
+        fi
+
+        if [[ -n "$subtitle" ]] ; then
+          debug "Add [$subtitle] to image $mix_image"
+          mogrify -gravity south -pointsize "$fontsize" -font "$font" -undercolor "#0008" -fill "#FFF" -annotate '0x0+0+5' "$subtitle" "$mix_image"
+        fi
+      fi
+      if [[ -f "$mix_image" ]] ; then
+        debug "Add metadata & image on $mix_output"
+        AtomicParsley "$mix_output" \
+          --overWrite \
+          --artist "$username" \
+          --album "$playlist" \
+          --title "$mix_title" \
+          --podcastURL "$mix_url" \
+          --artwork "$mix_image" \
+          --category "mixcloud" \
+          --keyword "shmixcloud" \
+          --comment "Created with pforret/shmixcloud" \
+           &>> "$download_log"
+      else
+        debug "Add metadata on $mix_output"
+        AtomicParsley "$mix_output" \
+          --overWrite \
+          --artist "$username" \
+          --album "$playlist" \
+          --title "$mix_title" \
+          --podcastURL "$mix_url" \
+          --category "mixcloud" \
+          --keyword "shmixcloud" \
+          --comment "Created with pforret/shmixcloud" \
+           &>> "$download_log"
+      fi
+
+    done
+}
+
+function do_download2() {
   log_to_file "download [$1]"
   require_binary youtube-dl
   require_binary AtomicParsley
@@ -91,6 +193,7 @@ function do_download() {
   # shellcheck disable=SC2154
   local image_dimensions="${pixels}x${pixels}"
 
+  local username
   username=$(echo "$1" | cut -d/ -f4)
   if [[ -z "$playlist" ]] ; then
     playlist=$(basename "$1")
@@ -115,7 +218,7 @@ function do_download() {
     fi
   fi
     # shellcheck disable=SC2154
-  download_log="$log_dir/download.$playlist.log"
+  local download_log="$log_dir/download.$playlist.log"
   out "## DOWNLOAD MEDIA"
   debug "Download log in [$download_log]"
 
