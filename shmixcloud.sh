@@ -14,16 +14,18 @@ flag|q|quiet|no output
 flag|v|verbose|output more
 flag|f|force|do not ask for confirmation (always yes)
 flag|Q|qrcode|add QR encode of URL to image
-option|A|audio|audio format to use|m4a
-option|F|font|font to use for subtitle|Georgia
-option|G|fontsize|font size|48
-option|N|number|maximum downloads from this playlist|10
-option|P|pixels|resolution image (width/height in pixels)|500
-option|S|subtitle|subtitle for the image|pforret/shmixcloud
-option|I|filter|only download matching mixes|/
 option|l|log_dir|folder for log files |$HOME/log/$script_prefix
 option|o|out_dir|output folder for the m4a/mp3 files (default: derive from URL)|
 option|t|tmp_dir|folder for temp files|/tmp/$script_prefix
+option|A|audio|audio format to use|m4a
+option|C|comment|comment metadata for audio file|%a
+option|F|font|font to use for subtitle|Georgia
+option|G|fontsize|font size|48
+option|I|filter|only download matching mixes|/
+option|N|number|maximum downloads from this playlist|10
+option|P|pixels|resolution image (width/height in pixels)|500
+option|S|subtitle|subtitle for the image|%u @ %y
+option|T|title|title metadata for audio file|%d: %t (%mmin)
 param|1|action|action to perform: download/update/check
 param|?|url|Mixcloud URL of a user or a playlist
 " | grep -v '^#' | grep -v '^\s*$'
@@ -84,7 +86,7 @@ main() {
 #####################################################################
 
 function do_download(){
-  log_to_file "download 1-by-1 [$1]"
+  log_to_file "download from mixcloud [$1]"
   require_binary AtomicParsley
   require_binary curl
   require_binary jq
@@ -95,11 +97,11 @@ function do_download(){
   local input_url="$1"
   username=$(echo "$1" | cut -d/ -f4)
   playlist=$(basename "$1")
+  uniq=$(echo "$1" | hash 8)
+
   [[ "$playlist" == "uploads" ]] && playlist=$username
 
-  uniq=$(echo "$1" | hash 8)
   # shellcheck disable=SC2154
-  local image_dimensions="${pixels}x${pixels}"
   # shellcheck disable=SC2154
   local temp_json="$tmp_dir/$username.$uniq.json"
   if [[ ! -f "$temp_json" ]] ; then
@@ -109,16 +111,18 @@ function do_download(){
   # shellcheck disable=SC2154
   local download_log="$log_dir/download.$uniq.log"
 
-  local mix_url mix_id mix_title mix_duration mix_date mix_file mix_uploader mix_thumb mix_count
+  local mix_url mix_id mix_title mix_duration mix_date mix_file mix_uploader mix_thumb mix_count mix_artist mix_description
   mix_count=0
   # shellcheck disable=SC2154
-  < "$temp_json" jq -r '[.webpage_url, .id, .title , .duration, .upload_date, ._filename, .uploader_id, .thumbnail ] | join("\t")' \
+  < "$temp_json" jq -r '[.webpage_url, .id, .title , .duration, .upload_date, ._filename, .uploader_id, .thumbnail, .artist ] | join("\t")' \
   | grep -i "$filter" \
-  | while IFS=$'\t' read -r mix_url mix_id mix_title mix_duration mix_date mix_file mix_uploader mix_thumb; do
+  | while IFS=$'\t' read -r mix_url mix_id mix_title mix_duration mix_date mix_file mix_uploader mix_thumb mix_artist; do
       mix_count=$((mix_count + 1))
       [[ $mix_count -gt $number ]] && continue
       mix_uniq=$(echo "$mix_url" | hash 4)
       mix_minutes=$((mix_duration / 60))
+      mix_description=""
+      local pretty_date="${mix_date:0:4}-${mix_date:4:2}-${mix_date:6:2}"
       # shellcheck disable=SC2154
       local mix_output="$out_dir/$mix_date.${mix_id:0:32}.$mix_uniq.$audio"
       local mix_image="$tmp_dir/$mix_date.${mix_id:0:32}.$mix_uniq.jpg"
@@ -137,6 +141,7 @@ function do_download(){
         curl -s -o "$mix_image" "$mix_thumb"
         [[ ! -f "$mix_image" ]] && cp "$script_install_folder/assets/mixcloud.jpg" "$mix_image"
         debug "Add noise to image $mix_image"
+        local image_dimensions="${pixels}x${pixels}"
         mogrify -resize "$image_dimensions" -brightness-contrast -30x10 -statistic median 3x3 -attenuate .5 +noise Gaussian "$mix_image"
 
         if [[ "$qrcode" -gt 0 ]] ; then
@@ -149,9 +154,11 @@ function do_download(){
           rm "$qr_orig"
         fi
 
+        local new_sub
         if [[ -n "$subtitle" ]] ; then
-          debug "Add [$subtitle] to image $mix_image"
-          mogrify -gravity south -pointsize "$fontsize" -font "$font" -undercolor "#0008" -fill "#FFF" -annotate '0x0+0+5' "$subtitle" "$mix_image"
+          new_sub=$(build_title "$subtitle" "$mix_id" "$pretty_date" "$mix_title" "$mix_artist" "$mix_description" "$mix_minutes" "$username")
+          debug "Add subtitle [$new_sub] to image $mix_image"
+          mogrify -gravity south -pointsize "$fontsize" -font "$font" -undercolor "#0008" -fill "#FFF" -annotate '0x0+0+5' "$new_sub" "$mix_image"
         fi
       fi
       if [[ -f "$mix_image" ]] ; then
@@ -160,12 +167,12 @@ function do_download(){
           --overWrite \
           --artist "$username" \
           --album "$playlist" \
-          --title "$mix_title" \
+          --title "$(build_title "$title" "$mix_id" "$pretty_date" "$mix_title" "$mix_artist" "$mix_description" "$mix_minutes" "$username")" \
           --podcastURL "$mix_url" \
           --artwork "$mix_image" \
           --category "mixcloud" \
           --keyword "shmixcloud" \
-          --comment "Created with pforret/shmixcloud" \
+          --comment "$(build_title "$comment" "$mix_id" "$pretty_date" "$mix_title" "$mix_artist" "$mix_description" "$mix_minutes" "$username")" \
            &>> "$download_log"
       else
         debug "Add metadata on $mix_output"
@@ -173,130 +180,42 @@ function do_download(){
           --overWrite \
           --artist "$username" \
           --album "$playlist" \
-          --title "$mix_title" \
+          --title "$(build_title "$title" "$mix_id" "$pretty_date" "$mix_title" "$mix_artist" "$mix_description" "$mix_minutes" "$username")" \
           --podcastURL "$mix_url" \
           --category "mixcloud" \
           --keyword "shmixcloud" \
-          --comment "Created with pforret/shmixcloud" \
+          --comment "$(build_title "$comment" "$mix_id" "$pretty_date" "$mix_title" "$mix_artist" "$mix_description" "$mix_minutes" "$username")" \
            &>> "$download_log"
       fi
-
     done
 }
 
-function do_download2() {
-  log_to_file "download [$1]"
-  require_binary youtube-dl
-  require_binary AtomicParsley
-  require_binary magick imagemagick
-
-  # shellcheck disable=SC2154
-  local image_dimensions="${pixels}x${pixels}"
-
-  local username
-  username=$(echo "$1" | cut -d/ -f4)
-  if [[ -z "$playlist" ]] ; then
-    playlist=$(basename "$1")
-    [[ "$playlist" == "uploads" ]] && playlist=$username
-  fi
-  if [[ -z "$out_dir" ]] ; then
-    if [[ "$playlist" == "$username" ]] ; then
-      out_dir="./$playlist"
-    else
-      out_dir="./${username}•${playlist}"
-    fi
-  fi
-  debug "Output folder = [$out_dir]"
-  [[ ! -d $out_dir ]] && mkdir -p "$out_dir" && log_to_file "Create output folder [$out_dir]"
-  pushd "$out_dir" &> /dev/null || die "Cannot cd to [$out_dir]"
-
-  if [[ ! $force -gt 0 ]] ; then
-    find . -mtime +1 -name "$playlist.done" -exec rm {} \;
-    if [[ -f "$playlist.done" ]] ; then
-      out "Last download was less than 24h ago. use -f to force download anyway"
-      safe_exit
-    fi
-  fi
-    # shellcheck disable=SC2154
-  local download_log="$log_dir/download.$playlist.log"
-  out "## DOWNLOAD MEDIA"
-  debug "Download log in [$download_log]"
-
-    # shellcheck disable=SC2154
-  youtube-dl \
-    --max-downloads "$number" \
-    --no-overwrites \
-    --no-progress \
-    --extract-audio --audio-format "$audio" \
-    --write-thumbnail \
-    "$1" | tee "$download_log" | awk '/\[download\]/ {$1="*"; print $0}'
-
-  out "## ENRICH MEDIA"
-    # shellcheck disable=SC2154
-    find . -type f -name "*.$audio" -mtime -1 \
-    | while read -r audio_file ; do
-    out "* $audio_file"
-    title=$(basename "$audio_file" ."$audio" | sed 's|[_-]| |g')
-    title=$(title_case "$title" " "| remove_duplicate_words)
-    debug "[$audio_file] => [$title]"
-    echo "## $audio_file" &>> "$download_log"
-    image_jpg=$(basename "$audio_file" ."$audio").jpg
-    image_png=$(basename "$audio_file" ."$audio").png
-    cover_image=""
-    [[ -f "$image_jpg" ]] && cover_image="$image_jpg"
-    [[ -f "$image_png" ]] && cover_image="$image_png"
-    if [[ -n "$cover_image" ]] ; then
-      temp_image="./$playlist.png"
-      debug "Write metadata and image [$temp_image]"
-
-      magick "$cover_image" -resize "$image_dimensions" -statistic median 3x3 -attenuate .5 +noise Gaussian "$temp_image"
-
-      if [[ "$qrcode" -gt 0 ]] ; then
-        require_binary qrencode
-        local qr_orig="./url_orig.jpg"
-        qrencode -o "$qr_orig" -m 2 -s 25 "$1"
-        local qr_prep="./url_prep.jpg"
-        magick "$qr_orig" -resize "120x120" "$qr_prep"
-        debug "Add [$subtitle] to image $temp_image"
-        magick "$temp_image" "$qr_prep" -gravity East -compose dissolve -define compose:args=75,100 -composite "$temp_image.temp.png"
-        mv "$temp_image.temp.png" "$temp_image"
-      fi
-
-      if [[ -n "$subtitle" ]] ; then
-        debug "Add [$subtitle] to image $temp_image"
-        magick "$temp_image" -gravity south -pointsize 32 -font "$font" -fill black -annotate '0x0+0+5' "$subtitle" -fill white -annotate '0x0+2+6' "$subtitle"  "$temp_image.temp.png"
-        mv "$temp_image.temp.png" "$temp_image"
-      fi
-
-      AtomicParsley "$audio_file" \
-        --overWrite \
-        --artist "$username" \
-        --title "$title" \
-        --album "$playlist" \
-        --podcastURL "$url" \
-        --artwork "$temp_image" \
-        --comment "Created with pforret/shmixcloud" \
-         &>> "$download_log"
-    else
-      debug "Write metadata -- no image"
-      AtomicParsley "$audio_file" \
-        --overWrite \
-        --artist "$username" \
-        --title "$title" \
-        --album "$playlist" \
-        --podcastURL "$url" \
-        --comment "Created with pforret/shmixcloud" \
-         &>> "$download_log"
-    fi
-    rename_file_if_too_long "$audio_file" "$length"
-  done
-  ((verbose)) || rm ./*.jpg
-
-  echo "$url" > "$playlist.done"
-
-  popd &> /dev/null || die "Cannot return to current folder"
-
+function build_title(){
+  # pattern="$1"
+  # mix_url mix_id mix_title mix_duration mix_date mix_file mix_uploader mix_thumb mix_artist mix_description
+  echo "$1" \
+  | awk \
+      -v id="$2" \
+      -v date="$3" \
+      -v title="$4" \
+      -v artist="$5" \
+      -v description="$6" \
+      -v minutes="$7" \
+      -v user="$8" \
+      '{
+      year=substr(date,1,4);
+      gsub(/%a/,artist);
+      gsub(/%c/,description);
+      gsub(/%d/,date);
+      gsub(/%i/,id);
+      gsub(/%m/,minutes);
+      gsub(/%t/,title);
+      gsub(/%u/,user);
+      gsub(/%y/,year);
+      print;
+      }'
 }
+
 
 function remove_duplicate_words(){
   awk '{
@@ -315,22 +234,6 @@ function remove_duplicate_words(){
     }
     print substr(str,1,length(str)-1)
    }'
-}
-
-function rename_file_if_too_long(){
-  local filename="$1"
-  local length="$2"
-
-  local extension="${filename##*.}"
-  if [[ "${#filename}" -gt "$length" ]] ; then
-    local md
-    local cutoff
-    md=$(basename "$filename" | hash 4)
-    cutoff=$((length - 5))
-    new_name=$(echo "$filename" | cut -c1-$cutoff).$md.$extension
-    debug "New name is now $new_name"
-    mv "$filename" "$new_name"
-  fi
 }
 
 #####################################################################
@@ -449,23 +352,11 @@ slugify() {
 }
 
 title_case() {
-    # title_case <input> <separator>
-    # title_case "Jack, Jill & Clémence LTD"     => JackJillClemenceLtd
-    # title_case "Jack, Jill & Clémence LTD" "_" => Jack_Jill_Clemence_Ltd
-    separator="${2:-}"
-    # shellcheck disable=SC2020
-    echo "$1" |
-        tr '[:upper:]' '[:lower:]' |
-        tr 'àáâäæãåāçćčèéêëēėęîïííīįìłñńôöòóœøōõßśšûüùúūÿžźż' 'aaaaaaaaccceeeeeeeiiiiiiilnnoooooooosssuuuuuyzzz' |
-        awk '{ gsub(/[\[\]@#$%^&*;,.:()<>!?\/+=_-]/," ",$0); print $0; }' |
-        awk '{
-          for (i=1; i<=NF; ++i) {
-              $i = toupper(substr($i,1,1)) tolower(substr($i,2))
-          };
+    tr 'àáâäæãåāçćčèéêëēėęîïííīįìłñńôöòóœøōõßśšûüùúūÿžźż' 'aaaaaaaaccceeeeeeeiiiiiiilnnoooooooosssuuuuuyzzz' |
+    awk '{
+          for (i=1; i<=NF; ++i) { $i = toupper(substr($i,1,1)) tolower(substr($i,2)) };
           print $0;
-          }' |
-        sed "s/ /$separator/g" |
-        cut -c1-70
+          }'
 }
 
 ### interactive
