@@ -124,6 +124,7 @@ function do_download(){
       mix_description=""
       local pretty_date="${mix_date:0:4}-${mix_date:4:2}-${mix_date:6:2}"
       # shellcheck disable=SC2154
+      [[ -z "$out_dir" ]] && out_dir="$username"
       local mix_output="$out_dir/$mix_date.${mix_id:0:32}.$mix_uniq.$audio"
       local mix_image="$tmp_dir/$mix_date.${mix_id:0:32}.$mix_uniq.jpg"
       # [[ -f "$mix_output" ]] && continue
@@ -187,6 +188,7 @@ function do_download(){
           --comment "$(build_title "$comment" "$mix_id" "$pretty_date" "$mix_title" "$mix_artist" "$mix_description" "$mix_minutes" "$username")" \
            &>> "$download_log"
       fi
+      log_to_file "[$mix_output] downloaded and enriched"
     done
 }
 
