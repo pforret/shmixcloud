@@ -13,14 +13,15 @@ flag|h|help|show usage
 flag|q|quiet|no output
 flag|v|verbose|output more
 flag|f|force|do not ask for confirmation (always yes)
+flag|f|force|do not ask for confirmation (always yes)
 flag|Q|qrcode|add QR encode of URL to image
 option|l|log_dir|folder for log files |$HOME/log/$script_prefix
 option|o|out_dir|output folder for the m4a/mp3 files (default: derive from URL)|
 option|t|tmp_dir|folder for temp files|/tmp/$script_prefix
 option|A|audio|audio format to use|m4a
-option|C|comment|comment metadata for audio file|%a
-option|F|font|font to use for subtitle|Georgia
-option|G|fontsize|font size|48
+option|C|comment|comment metadata for audio file|%c %a
+option|F|font|font to use for subtitle|Nunito-Bold
+option|G|fontsize|font size|32
 option|I|filter|only download matching mixes|/
 option|N|number|maximum downloads from this playlist|10
 option|P|pixels|resolution image (width/height in pixels)|500
@@ -120,8 +121,8 @@ function do_download(){
       mix_count=$((mix_count + 1))
       [[ $mix_count -gt $number ]] && continue
       mix_uniq=$(echo "$mix_url" | hash 4)
-      mix_minutes=$((mix_duration / 60))
-      mix_description=""
+      mix_minutes=$(( (mix_duration+30) / 60))
+      mix_description="$(< "$temp_json"  jq -r "select(.id==\"$mix_id\") | .description" | tr "\r\n\t" " " | sed 's/null//')"
       local pretty_date="${mix_date:0:4}-${mix_date:4:2}-${mix_date:6:2}"
       # shellcheck disable=SC2154
       [[ -z "$out_dir" ]] && out_dir="$username"
@@ -138,42 +139,47 @@ function do_download(){
           "$mix_url" >> "$download_log"
       fi
 
-      if [[ ! -f "$mix_image" ]] ; then
-        curl -s -o "$mix_image" "$mix_thumb"
-        [[ ! -f "$mix_image" ]] && cp "$script_install_folder/assets/mixcloud.jpg" "$mix_image"
-        debug "Add noise to image $mix_image"
-        local image_dimensions="${pixels}x${pixels}"
-        mogrify -resize "$image_dimensions" -brightness-contrast -30x10 -statistic median 3x3 -attenuate .5 +noise Gaussian "$mix_image"
+      curl -s -o "$mix_image" "$mix_thumb"
+      [[ ! -f "$mix_image" ]] && cp "$script_install_folder/assets/mixcloud.jpg" "$mix_image"
+      debug "Resize & noise: $mix_image"
+      local image_dimensions="${pixels}x${pixels}"
+      mogrify -resize "$image_dimensions" -brightness-contrast -30x10 -statistic median 3x3 -attenuate .5 +noise Gaussian "$mix_image"
 
-        if [[ "$qrcode" -gt 0 ]] ; then
-          require_binary qrencode
-          local qr_orig="$tmp_dir/qr.$uniq.jpg"
-          qrencode -o "$qr_orig" -m 2 -s 25 "$input_url"
-          mogrify -resize "200x200" "$qr_orig"
-          magick "$mix_image" "$qr_orig" -gravity East -compose dissolve -define compose:args=75,100 -composite "$mix_image.temp.png"
-          mv "$mix_image.temp.png" "$mix_image"
-          rm "$qr_orig"
-        fi
-
-        local new_sub
-        if [[ -n "$subtitle" ]] ; then
-          new_sub=$(build_title "$subtitle" "$mix_id" "$pretty_date" "$mix_title" "$mix_artist" "$mix_description" "$mix_minutes" "$username")
-          debug "Add subtitle [$new_sub] to image $mix_image"
-          mogrify -gravity south -pointsize "$fontsize" -font "$font" -undercolor "#0008" -fill "#FFF" -annotate '0x0+0+5' "$new_sub" "$mix_image"
-        fi
+      if [[ "$qrcode" -gt 0 ]] ; then
+        require_binary qrencode
+        local qr_orig="$tmp_dir/qr.$uniq.jpg"
+        qrencode -o "$qr_orig" -m 2 -s 25 "$input_url"
+        mogrify -resize "200x200" "$qr_orig"
+        magick "$mix_image" "$qr_orig" -gravity East -compose dissolve -define compose:args=75,100 -composite "$mix_image.temp.png"
+        mv "$mix_image.temp.png" "$mix_image"
+        rm "$qr_orig"
       fi
+
+      local new_sub
+      if [[ -n "$subtitle" ]] ; then
+        new_sub=$(build_title "$subtitle" "$mix_id" "$pretty_date" "$mix_title" "$mix_artist" "$mix_description" "$mix_minutes" "$username")
+        debug "Image subtitle: '$new_sub'"
+        mogrify -gravity south -pointsize "$fontsize" -font "$font" -undercolor "#0008" -fill "#FFF" -annotate '0x0+0+5' "$new_sub" "$mix_image"
+      fi
+
+      local mix_comment
+      mix_comment="$(build_title "$comment" "$mix_id" "$pretty_date" "$mix_title" "$mix_artist" "$mix_description" "$mix_minutes" "$username")"
+      mix_title="$(build_title "$title" "$mix_id" "$pretty_date" "$mix_title" "$mix_artist" "$mix_description" "$mix_minutes" "$username")"
+      debug "Audio title   : '$mix_title'"
+      debug "Audio comment : '$mix_comment'"
       if [[ -f "$mix_image" ]] ; then
-        debug "Add metadata & image on $mix_output"
+        debug "Annotate: $mix_output"
         AtomicParsley "$mix_output" \
           --overWrite \
           --artist "$username" \
           --album "$playlist" \
-          --title "$(build_title "$title" "$mix_id" "$pretty_date" "$mix_title" "$mix_artist" "$mix_description" "$mix_minutes" "$username")" \
+          --title "$mix_title" \
           --podcastURL "$mix_url" \
           --artwork "$mix_image" \
           --category "mixcloud" \
           --keyword "shmixcloud" \
-          --comment "$(build_title "$comment" "$mix_id" "$pretty_date" "$mix_title" "$mix_artist" "$mix_description" "$mix_minutes" "$username")" \
+          --description "$mix_comment" \
+          --comment "$mix_comment" \
            &>> "$download_log"
       else
         debug "Add metadata on $mix_output"
@@ -181,13 +187,16 @@ function do_download(){
           --overWrite \
           --artist "$username" \
           --album "$playlist" \
-          --title "$(build_title "$title" "$mix_id" "$pretty_date" "$mix_title" "$mix_artist" "$mix_description" "$mix_minutes" "$username")" \
+          --title "$mix_title" \
           --podcastURL "$mix_url" \
           --category "mixcloud" \
           --keyword "shmixcloud" \
-          --comment "$(build_title "$comment" "$mix_id" "$pretty_date" "$mix_title" "$mix_artist" "$mix_description" "$mix_minutes" "$username")" \
+          --description "$mix_comment" \
+          --comment "$mix_comment" \
            &>> "$download_log"
       fi
+      [[ "$verbose" -eq 0 ]]  && rm "$mix_image"
+      out "$mix_output"
       log_to_file "[$mix_output] downloaded and enriched"
     done
 }
@@ -215,7 +224,8 @@ function build_title(){
       gsub(/%u/,user);
       gsub(/%y/,year);
       print;
-      }'
+      }' \
+  | cut -c1-256
 }
 
 
