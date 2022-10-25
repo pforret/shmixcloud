@@ -118,6 +118,7 @@ function do_download(){
   local mix_url mix_id mix_title mix_duration mix_date mix_file mix_uploader mix_thumb mix_count mix_artist mix_description
   mix_count=0
   # shellcheck disable=SC2154
+  # shellcheck disable=SC2034
     jq -r '[.webpage_url, .id, .title , .duration, .upload_date, ._filename, .uploader_id, .thumbnail, .artist ] | join("\t")' "$temp_json" \
   | grep -i "$filter" \
   | while IFS=$'\t' read -r mix_url mix_id mix_title mix_duration mix_date mix_file mix_uploader mix_thumb mix_artist; do
