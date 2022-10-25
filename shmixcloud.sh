@@ -107,9 +107,10 @@ function do_download(){
   # shellcheck disable=SC2154
   local temp_json="$tmp_dir/$username.$uniq.$days.json"
   if [[ ! -f "$temp_json" ]] ; then
-    debug "Download JSON info to $temp_json"
+    debug "[$temp_json]: download JSON from $1"
     notbefore=$(date '+%Y%m%d' -d "today - $days days")
     youtube-dl -j --dateafter "$notbefore" "$1" > "$temp_json"
+    debug "[$temp_json]: $(du -h "$temp_json" | awk '{print $1}')"
   fi
   # shellcheck disable=SC2154
   local download_log="$log_dir/download.$uniq.log"
@@ -132,7 +133,7 @@ function do_download(){
       local mix_image="$tmp_dir/$mix_date.${mix_id:0:32}.$mix_uniq.jpg"
       # [[ -f "$mix_output" ]] && continue
       if [[ ! -f "$mix_output" ]] ; then
-        debug "Now downloading $mix_output ..."
+        debug "Now downloading $mix_output (originally $mix_file) ..."
         youtube-dl \
           --no-overwrites \
           --no-progress \
@@ -366,6 +367,7 @@ slugify() {
 }
 
 title_case() {
+    # shellcheck disable=SC2020
     tr 'àáâäæãåāçćčèéêëēėęîïííīįìłñńôöòóœøōõßśšûüùúūÿžźż' 'aaaaaaaaccceeeeeeeiiiiiiilnnoooooooosssuuuuuyzzz' |
     awk '{
           for (i=1; i<=NF; ++i) { $i = toupper(substr($i,1,1)) tolower(substr($i,2)) };
