@@ -20,6 +20,7 @@ option|o|out_dir|output folder for the m4a/mp3 files (default: derive from URL)|
 option|t|tmp_dir|folder for temp files|/tmp/$script_prefix
 option|A|audio|audio format to use|m4a
 option|C|comment|comment metadata for audio file|%c %a
+option|D|days|maximul days to go back|365
 option|F|font|font to use for subtitle|Nunito-Bold
 option|G|fontsize|font size|32
 option|I|filter|only download matching mixes|/
@@ -88,7 +89,7 @@ main() {
 
 function do_download(){
   log_to_file "download from mixcloud [$1]"
-  require_binary AtomicParsley
+  require_binary AtomicParsley atomicparsley
   require_binary curl
   require_binary jq
   require_binary mogrify imagemagick
@@ -104,10 +105,11 @@ function do_download(){
 
   # shellcheck disable=SC2154
   # shellcheck disable=SC2154
-  local temp_json="$tmp_dir/$username.$uniq.json"
+  local temp_json="$tmp_dir/$username.$uniq.$days.json"
   if [[ ! -f "$temp_json" ]] ; then
     debug "Download JSON info to $temp_json"
-    youtube-dl -j "$1" > "$temp_json"
+    notbefore=$(date '+%Y%m%d' -d "today - $days days")
+    youtube-dl -j --dateafter "$notbefore" "$1" > "$temp_json"
   fi
   # shellcheck disable=SC2154
   local download_log="$log_dir/download.$uniq.log"
@@ -115,14 +117,14 @@ function do_download(){
   local mix_url mix_id mix_title mix_duration mix_date mix_file mix_uploader mix_thumb mix_count mix_artist mix_description
   mix_count=0
   # shellcheck disable=SC2154
-  < "$temp_json" jq -r '[.webpage_url, .id, .title , .duration, .upload_date, ._filename, .uploader_id, .thumbnail, .artist ] | join("\t")' \
+    jq -r '[.webpage_url, .id, .title , .duration, .upload_date, ._filename, .uploader_id, .thumbnail, .artist ] | join("\t")' "$temp_json" \
   | grep -i "$filter" \
   | while IFS=$'\t' read -r mix_url mix_id mix_title mix_duration mix_date mix_file mix_uploader mix_thumb mix_artist; do
       mix_count=$((mix_count + 1))
       [[ $mix_count -gt $number ]] && continue
       mix_uniq=$(echo "$mix_url" | hash 4)
       mix_minutes=$(( (mix_duration+30) / 60))
-      mix_description="$(< "$temp_json"  jq -r "select(.id==\"$mix_id\") | .description" | tr "\r\n\t" " " | sed 's/null//')"
+      mix_description="$( jq -r "select(.id==\"$mix_id\") | .description" | tr "\r\n\t" " " | sed 's/null//' "$temp_json" )"
       local pretty_date="${mix_date:0:4}-${mix_date:4:2}-${mix_date:6:2}"
       # shellcheck disable=SC2154
       [[ -z "$out_dir" ]] && out_dir="$username"
@@ -700,7 +702,7 @@ require_binary(){
   binary="$1"
   path_binary=$(command -v "$binary" 2>/dev/null)
   [[ -n "$path_binary" ]] && debug "️$require_icon required [$binary] -> $path_binary" && return 0
-  words=$(echo "${2:-}" | wc -l)
+  words=$(echo "${2:-}" | wc -w)
   if ((force)) ; then
     announce "Installing $1 ..."
     case $words in
@@ -713,8 +715,8 @@ require_binary(){
     esac
   else
     case $words in
-      0)  install_instructions="$install_package $1" ;;
-      1)  install_instructions="$install_package $2" ;;
+      0)  install_instructions="$install_package ${1:-}" ;;
+      1)  install_instructions="$install_package ${2:-}" ;;
       *)  install_instructions="${2:-}"
     esac
     alert "$script_basename needs [$binary] but it cannot be found"
@@ -859,8 +861,8 @@ prep_log_and_temp_dir() {
   log_file=""
   if [[ -n "${tmp_dir:-}" ]]; then
     folder_prep "$tmp_dir" 1
-    tmp_file=$(mktemp "$tmp_dir/$execution_day.XXXXXX")
-    debug "$config_icon tmp_file: $tmp_file"
+    # tmp_file=$(mktemp "$tmp_dir/$execution_day.XXXXXX")
+    # debug "$config_icon tmp_file: $tmp_file"
     # you can use this temporary file in your program
     # it will be deleted automatically if the program ends without problems
   fi
