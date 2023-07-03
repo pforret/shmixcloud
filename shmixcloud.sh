@@ -20,7 +20,7 @@ option|o|out_dir|output folder for the m4a/mp3 files (default: derive from URL)|
 option|t|tmp_dir|folder for temp files|/tmp/$script_prefix
 option|A|audio|audio format to use|m4a
 option|C|comment|comment metadata for audio file|%c %a
-option|D|days|maximul days to go back|365
+option|D|days|maximum days to go back|365
 option|F|font|font to use for subtitle|Nunito-Bold
 option|G|fontsize|font size|32
 option|I|filter|only download matching mixes|/
@@ -104,12 +104,11 @@ function do_download(){
   [[ "$playlist" == "uploads" ]] && playlist=$username
 
   # shellcheck disable=SC2154
-  # shellcheck disable=SC2154
   local temp_json="$tmp_dir/$username.$uniq.$days.json"
+  debug "[$temp_json]: download JSON from $1"
   if [[ ! -f "$temp_json" ]] ; then
-    debug "[$temp_json]: download JSON from $1"
-    notbefore=$(date '+%Y%m%d' -d "today - $days days")
-    youtube-dl -j --dateafter "$notbefore" "$1" > "$temp_json"
+    not_before=$(date '+%Y%m%d' -d "today - $days days")
+    youtube-dl -j --dateafter "$not_before" "$1" > "$temp_json"
     debug "[$temp_json]: $(du -h "$temp_json" | awk '{print $1}')"
   fi
   # shellcheck disable=SC2154
@@ -126,7 +125,8 @@ function do_download(){
       [[ $mix_count -gt $number ]] && continue
       mix_uniq=$(echo "$mix_url" | hash 4)
       mix_minutes=$(( (mix_duration+30) / 60))
-      mix_description="$( jq -r "select(.id==\"$mix_id\") | .description" | tr "\r\n\t" " " | sed 's/null//' "$temp_json" )"
+      mix_description="$( jq -r "select(.id==\"$mix_id\") | .description"  "$temp_json" | tr "\r\n\t" " " | sed 's/null//')"
+      debug "mix $mix_count: $mix_file"
       local pretty_date="${mix_date:0:4}-${mix_date:4:2}-${mix_date:6:2}"
       # shellcheck disable=SC2154
       [[ -z "$out_dir" ]] && out_dir="$username"
