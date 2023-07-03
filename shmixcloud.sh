@@ -21,7 +21,7 @@ option|t|tmp_dir|folder for temp files|/tmp/$script_prefix
 option|A|audio|audio format to use|m4a
 option|C|comment|comment metadata for audio file|%c %a
 option|D|days|maximum days to go back|365
-option|F|font|font to use for subtitle|Nunito-Bold
+option|F|font|font to use for subtitle|Helvetica
 option|G|fontsize|font size|32
 option|I|filter|only download matching mixes|/
 option|N|number|maximum downloads from this playlist|10
@@ -126,32 +126,32 @@ function do_download(){
       mix_uniq=$(echo "$mix_url" | hash 4)
       mix_minutes=$(( (mix_duration+30) / 60))
       mix_description="$( jq -r "select(.id==\"$mix_id\") | .description"  "$temp_json" | tr "\r\n\t" " " | sed 's/null//')"
-      debug "mix $mix_count: $mix_file"
+      
+      debug "> Mix: $mix_count: $mix_file"
       local pretty_date="${mix_date:0:4}-${mix_date:4:2}-${mix_date:6:2}"
       # shellcheck disable=SC2154
-      [[ -z "$out_dir" ]] && out_dir="$username"
+      [[ -z "$out_dir" ]] && out_dir="output/$username"
+      [[ ! -d "$out_dir" ]] && mkdir -p "$out_dir"
       local mix_output="$out_dir/$mix_date.${mix_id:0:32}.$mix_uniq.$audio"
       local mix_image="$tmp_dir/$mix_date.${mix_id:0:32}.$mix_uniq.jpg"
-      # [[ -f "$mix_output" ]] && continue
+
       if [[ ! -f "$mix_output" ]] ; then
-        debug "Now downloading $mix_output (originally $mix_file) ..."
-        youtube-dl \
-          --no-overwrites \
-          --no-progress \
-          --extract-audio --audio-format "$audio" \
-          -o "$mix_output" \
-          "$mix_url" >> "$download_log"
+        debug "> Download: $mix_output ..."
+        local mix_temp="$tmp_dir/$(basename $mix_output)"
+        youtube-dl --no-overwrites --no-progress --extract-audio --audio-format "$audio" -o "$mix_temp" "$mix_url" >> "$download_log"
+        mv "$mix_temp" "$mix_output"
       fi
 
       curl -s -o "$mix_image" "$mix_thumb"
       [[ ! -f "$mix_image" ]] && cp "$script_install_folder/assets/mixcloud.jpg" "$mix_image"
-      debug "Resize & noise: $mix_image"
+      debug "> Resize & noise: $mix_image"
       local image_dimensions="${pixels}x${pixels}"
       mogrify -resize "$image_dimensions" -brightness-contrast -30x10 -statistic median 3x3 -attenuate .5 +noise Gaussian "$mix_image"
 
       if [[ "$qrcode" -gt 0 ]] ; then
         require_binary qrencode
         local qr_orig="$tmp_dir/qr.$uniq.jpg"
+        debug "> QR Code: $qr_orig"
         qrencode -o "$qr_orig" -m 2 -s 25 "$input_url"
         mogrify -resize "200x200" "$qr_orig"
         magick "$mix_image" "$qr_orig" -gravity East -compose dissolve -define compose:args=75,100 -composite "$mix_image.temp.png"
@@ -162,7 +162,7 @@ function do_download(){
       local new_sub
       if [[ -n "$subtitle" ]] ; then
         new_sub=$(build_title "$subtitle" "$mix_id" "$pretty_date" "$mix_title" "$mix_artist" "$mix_description" "$mix_minutes" "$username")
-        debug "Image subtitle: '$new_sub'"
+        debug "> Subtitle: '$new_sub'"
         mogrify -gravity south -pointsize "$fontsize" -font "$font" -undercolor "#0008" -fill "#FFF" -annotate '0x0+0+5' "$new_sub" "$mix_image"
       fi
 
