@@ -95,7 +95,6 @@ function do_download(){
   require_binary curl
   require_binary jq
   require_binary mogrify imagemagick
-  require_binary yt-dlp "pip install yt-dlp"
 
   local username uniq playlist not_before
   local input_url="$1"
@@ -110,7 +109,8 @@ function do_download(){
   debug "[$temp_json]: download JSON from $1"
   if [[ ! -f "$temp_json" ]] ; then
     not_before=$(date '+%Y%m%d' -d "today - $DAYS days")
-    yt-dlp -j --dateafter "$not_before" "$1" > "$temp_json"
+  # shellcheck disable=SC2154
+    "$BINARY" -j --dateafter "$not_before" "$1" > "$temp_json"
   fi
   debug "[$temp_json]: $(du -h "$temp_json" | awk '{print $1}')"
   # shellcheck disable=SC2154
@@ -141,7 +141,7 @@ function do_download(){
       if [[ ! -f "$mix_output" ]] ; then
         mix_temp="$tmp_dir/$(basename "$mix_output")"
         debug "> Download: $mix_temp -> $mix_output ..."
-        yt-dlp --no-overwrites --no-progress --extract-audio --audio-format "$AUDIO" -o "$mix_temp" "$mix_url" >> "$download_log"
+        "$BINARY" --no-overwrites --no-progress --extract-audio --audio-format "$AUDIO" -o "$mix_temp" "$mix_url" >> "$download_log"
         mv "$mix_temp" "$mix_output"
       fi
 
@@ -705,6 +705,7 @@ parse_options() {
 }
 
 require_binary(){
+  local binary path_binary install_instructions words
   binary="$1"
   path_binary=$(command -v "$binary" 2>/dev/null)
   [[ -n "$path_binary" ]] && debug "️$require_icon required [$binary] -> $path_binary" && return 0
