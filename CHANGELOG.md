@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 - work on new features
 
+## [3.0.0] - 2023-11-09
+### Added/changed
+- all parameters are upper case (.env file preference)
+- uses yt-dlp instead of youtube-dl
+
 ## [0.0.1] - 2021-07-07
 ### Added
 - create shmixcloud with [pforret/bashew](https://github.com/pforret/bashew)
