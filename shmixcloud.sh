@@ -18,16 +18,17 @@ flag|Q|qrcode|add QR encode of URL to image
 option|l|log_dir|folder for log files |$HOME/log/$script_prefix
 option|o|out_dir|output folder for the m4a/mp3 files (default: derive from URL)|
 option|t|tmp_dir|folder for temp files|/tmp/$script_prefix
-option|A|audio|audio format to use|m4a
-option|C|comment|comment metadata for audio file|%c %a
-option|D|days|maximum days to go back|365
-option|F|font|font to use for subtitle|Helvetica
-option|G|fontsize|font size|32
-option|I|filter|only download matching mixes|/
-option|N|number|maximum downloads from this playlist|10
-option|P|pixels|resolution image (width/height in pixels)|500
-option|S|subtitle|subtitle for the image|%u @ %y
-option|T|title|title metadata for audio file|%d: %t (%mmin)
+option|A|AUDIO|audio format to use|m4a
+option|B|BINARY|binary to use for downloading|yt-dlp
+option|C|COMMENT|comment metadata for audio file|%c %a
+option|D|DAYS|maximum days to go back|365
+option|F|FONT|font to use for subtitle|Helvetica
+option|G|FONTSIZE|font size|32
+option|I|FILTER|only download matching mixes|/
+option|N|NUMBER|maximum downloads from this playlist|10
+option|P|PIXELS|resolution image (width/height in pixels)|500
+option|S|SUBTITLE|subtitle for the image|%u @ %y
+option|T|TITLE|title metadata for audio file|%d: %t (%mmin)
 param|1|action|action to perform: download/update/check
 param|?|url|Mixcloud URL of a user or a playlist
 " | grep -v '^#' | grep -v '^\s*$'
@@ -65,6 +66,7 @@ main() {
     #TIP: use «$script_prefix env» to generate an example .env file
     #TIP:> $script_prefix env > .env
     check_script_settings
+    yt-dlp -U || echo "Run 'pip install --upgrade yt-dlp' to update yt-dlp"
     ;;
 
   update)
@@ -93,9 +95,9 @@ function do_download(){
   require_binary curl
   require_binary jq
   require_binary mogrify imagemagick
-  require_binary youtube-dl
+  require_binary yt-dlp "pip install yt-dlp"
 
-  local username uniq
+  local username uniq playlist not_before
   local input_url="$1"
   username=$(echo "$1" | cut -d/ -f4)
   playlist=$(basename "$1")
@@ -104,25 +106,25 @@ function do_download(){
   [[ "$playlist" == "uploads" ]] && playlist=$username
 
   # shellcheck disable=SC2154
-  local temp_json="$tmp_dir/$username.$uniq.$days.json"
+  local temp_json="$tmp_dir/$username.$uniq.$DAYS.json"
   debug "[$temp_json]: download JSON from $1"
   if [[ ! -f "$temp_json" ]] ; then
-    not_before=$(date '+%Y%m%d' -d "today - $days days")
-    youtube-dl -j --dateafter "$not_before" "$1" > "$temp_json"
-    debug "[$temp_json]: $(du -h "$temp_json" | awk '{print $1}')"
+    not_before=$(date '+%Y%m%d' -d "today - $DAYS days")
+    yt-dlp -j --dateafter "$not_before" "$1" > "$temp_json"
   fi
+  debug "[$temp_json]: $(du -h "$temp_json" | awk '{print $1}')"
   # shellcheck disable=SC2154
   local download_log="$log_dir/download.$uniq.log"
 
-  local mix_url mix_id mix_title mix_duration mix_date mix_file mix_uploader mix_thumb mix_count mix_artist mix_description
+  local mix_url mix_id mix_title mix_duration mix_date mix_file mix_uploader mix_thumb mix_count mix_artist mix_description mix_uniq mix_minutes
   mix_count=0
   # shellcheck disable=SC2154
   # shellcheck disable=SC2034
     jq -r '[.webpage_url, .id, .title , .duration, .upload_date, ._filename, .uploader_id, .thumbnail, .artist ] | join("\t")' "$temp_json" \
-  | grep -i "$filter" \
+  | grep -i "$FILTER" \
   | while IFS=$'\t' read -r mix_url mix_id mix_title mix_duration mix_date mix_file mix_uploader mix_thumb mix_artist; do
       mix_count=$((mix_count + 1))
-      [[ $mix_count -gt $number ]] && continue
+      [[ $mix_count -gt $NUMBER ]] && continue
       mix_uniq=$(echo "$mix_url" | hash 4)
       mix_minutes=$(( (mix_duration+30) / 60))
       mix_description="$( jq -r "select(.id==\"$mix_id\") | .description"  "$temp_json" | tr "\r\n\t" " " | sed 's/null//')"
@@ -132,43 +134,44 @@ function do_download(){
       # shellcheck disable=SC2154
       [[ -z "$out_dir" ]] && out_dir="output/$username"
       [[ ! -d "$out_dir" ]] && mkdir -p "$out_dir"
-      local mix_output="$out_dir/$mix_date.${mix_id:0:32}.$mix_uniq.$audio"
-      local mix_image="$tmp_dir/$mix_date.${mix_id:0:32}.$mix_uniq.jpg"
+      local mix_output="$out_dir/$mix_date.${mix_id:0:20}.$mix_uniq.$AUDIO"
+      local mix_image="$tmp_dir/$mix_date.${mix_id:0:20}.$mix_uniq.jpg"
 
+      local mix_temp
       if [[ ! -f "$mix_output" ]] ; then
-        debug "> Download: $mix_output ..."
-        local mix_temp="$tmp_dir/$(basename $mix_output)"
-        youtube-dl --no-overwrites --no-progress --extract-audio --audio-format "$audio" -o "$mix_temp" "$mix_url" >> "$download_log"
+        mix_temp="$tmp_dir/$(basename "$mix_output")"
+        debug "> Download: $mix_temp -> $mix_output ..."
+        yt-dlp --no-overwrites --no-progress --extract-audio --audio-format "$AUDIO" -o "$mix_temp" "$mix_url" >> "$download_log"
         mv "$mix_temp" "$mix_output"
       fi
 
       curl -s -o "$mix_image" "$mix_thumb"
       [[ ! -f "$mix_image" ]] && cp "$script_install_folder/assets/mixcloud.jpg" "$mix_image"
       debug "> Resize & noise: $mix_image"
-      local image_dimensions="${pixels}x${pixels}"
+      local image_dimensions="${PIXELS}x${PIXELS}"
       mogrify -resize "$image_dimensions" -brightness-contrast -30x10 -statistic median 3x3 -attenuate .5 +noise Gaussian "$mix_image"
 
       if [[ "$qrcode" -gt 0 ]] ; then
-        require_binary qrencode
+        require_binary "qrencode"
         local qr_orig="$tmp_dir/qr.$uniq.jpg"
         debug "> QR Code: $qr_orig"
         qrencode -o "$qr_orig" -m 2 -s 25 "$input_url"
-        mogrify -resize "200x200" "$qr_orig"
-        magick "$mix_image" "$qr_orig" -gravity East -compose dissolve -define compose:args=75,100 -composite "$mix_image.temp.png"
+        mogrify -resize "300x300" "$qr_orig"
+        convert "$mix_image" "$qr_orig" -gravity Center -compose dissolve -define compose:args=50,100 -composite "$mix_image.temp.png"
         mv "$mix_image.temp.png" "$mix_image"
-        rm "$qr_orig"
+        # rm "$qr_orig"
       fi
 
       local new_sub
-      if [[ -n "$subtitle" ]] ; then
-        new_sub=$(build_title "$subtitle" "$mix_id" "$pretty_date" "$mix_title" "$mix_artist" "$mix_description" "$mix_minutes" "$username")
+      if [[ -n "$SUBTITLE" ]] ; then
+        new_sub=$(build_title "$SUBTITLE" "$mix_id" "$pretty_date" "$mix_title" "$mix_artist" "$mix_description" "$mix_minutes" "$username")
         debug "> Subtitle: '$new_sub'"
-        mogrify -gravity south -pointsize "$fontsize" -font "$font" -undercolor "#0008" -fill "#FFF" -annotate '0x0+0+5' "$new_sub" "$mix_image"
+        mogrify -gravity south -pointsize "$FONTSIZE" -font "$FONT" -undercolor "#0008" -fill "#FFF" -annotate '0x0+0+5' "$new_sub" "$mix_image"
       fi
 
       local mix_comment
-      mix_comment="$(build_title "$comment" "$mix_id" "$pretty_date" "$mix_title" "$mix_artist" "$mix_description" "$mix_minutes" "$username")"
-      mix_title="$(build_title "$title" "$mix_id" "$pretty_date" "$mix_title" "$mix_artist" "$mix_description" "$mix_minutes" "$username")"
+      mix_comment="$(build_title "$COMMENT" "$mix_id" "$pretty_date" "$mix_title" "$mix_artist" "$mix_description" "$mix_minutes" "$username")"
+      mix_title="$(build_title "$TITLE" "$mix_id" "$pretty_date" "$mix_title" "$mix_artist" "$mix_description" "$mix_minutes" "$username")"
       debug "Audio title   : '$mix_title'"
       debug "Audio comment : '$mix_comment'"
       if [[ -f "$mix_image" ]] ; then
