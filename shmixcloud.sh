@@ -95,6 +95,7 @@ function do_download(){
   require_binary curl
   require_binary jq
   require_binary mogrify imagemagick
+  announce "Download $NUMBER mixes from $1"
 
   local username uniq playlist not_before
   local input_url="$1"
