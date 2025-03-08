@@ -17,7 +17,7 @@ flag|f|force|do not ask for confirmation (always yes)
 flag|Q|qrcode|add QR encode of URL to image
 option|l|log_dir|folder for log files |$HOME/log/$script_prefix
 option|o|out_dir|output folder for the m4a/mp3 files (default: derive from URL)|
-option|t|tmp_dir|folder for temp files|/tmp/$script_prefix
+option|t|tmp_dir|folder for temp files|.tmp
 option|A|AUDIO|audio format to use|m4a
 option|B|DOWNLOADER|binary to use for downloading|yt-dlp
 option|C|COMMENT|comment metadata for audio file|%c %a
@@ -51,14 +51,6 @@ main() {
     do_download "$url"
     ;;
 
-  action2)
-    #TIP: use «$script_prefix action2» to ...
-    #TIP:> $script_prefix action2 input.txt output.pdf
-
-    # shellcheck disable=SC2154
-    do_action2 "$input" "$output"
-    ;;
-
   check|env)
     ## leave this default action, it will make it easier to test your script
     #TIP: use «$script_prefix check» to check if this script is ready to execute and what values the options/flags are
@@ -67,6 +59,12 @@ main() {
     #TIP:> $script_prefix env > .env
     check_script_settings
     yt-dlp -U || echo "Run 'pip install --upgrade yt-dlp' to update yt-dlp"
+    ;;
+
+  install)
+    #TIP: use «$script_prefix install» to install all required binaries
+    #TIP:> $script_prefix install
+    install_required_binaries
     ;;
 
   update)
@@ -95,6 +93,7 @@ function do_download(){
   require_binary curl
   require_binary jq
   require_binary mogrify imagemagick
+  require_binary $DOWNLOADER
   announce "Download $NUMBER mixes from $1"
 
   local username uniq playlist not_before
@@ -107,12 +106,21 @@ function do_download(){
 
   # shellcheck disable=SC2154
   local temp_json="$tmp_dir/$username.$uniq.$DAYS.json"
-  debug "[$temp_json]: download JSON from $1"
+  debug "JSON cache: $temp_json"
+  if [[ -f "$temp_json" ]] ; then
+    # delete $temp_json if size is 0 bytes
+    [[ ! -s "$temp_json" ]] && rm "$temp_json"
+    # delete if it is too old
+    # find "$tmp_dir" -mtime "+$DAYS" -name "$username.*.json" -delete
+  fi
   if [[ ! -f "$temp_json" ]] ; then
-    not_before=$(date '+%Y%m%d' -d "today - $DAYS days")
-  # shellcheck disable=SC2154
+    # shellcheck disable=SC2154
+    not_before=$(calculate_not_before "$DAYS")
+    debug "$os_kernel => only consider mixes after $not_before"
+    debug "[$temp_json]: download JSON from $1"
     "$DOWNLOADER" -j --dateafter "$not_before" "$1" > "$temp_json"
   fi
+
   debug "[$temp_json]: $(du -h "$temp_json" | awk '{print $1}')"
   # shellcheck disable=SC2154
   local download_log="$log_dir/download.$uniq.log"
@@ -254,6 +262,16 @@ function remove_duplicate_words(){
     }
     print substr(str,1,length(str)-1)
    }'
+}
+
+function calculate_not_before(){
+  local DAYS="$1"
+  if [[ $os_kernel == "Darwin" ]] ; then
+    # /bin/date works differently for MacOS
+    date -v "-${DAYS}d" '+%Y%m%d'
+  else
+    date -d "$DAYS days ago" '+%Y%m%d'
+  fi
 }
 
 #####################################################################
