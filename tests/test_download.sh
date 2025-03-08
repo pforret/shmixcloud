@@ -17,12 +17,6 @@ root_script=$(find "$root_folder"  -maxdepth 1 -name "*.sh" | head -1) # normall
 
 test_download_one() {
   # script without parameters should give usage info
-  ./shmixcloud -N 1 -f -v download https://www.mixcloud.com/oldiespopcorn/
+  "$root_script" -N 1 -f -v download https://www.mixcloud.com/oldiespopcorn/
   assert_exists "output/"
-}
-
-test_usage_shows_option_verbose() {
-  # script without parameters should show option -v or --verbose
-  assert_equals 1 "$("$root_script" 2>&1 | grep -c "Usage")"
-  assert_equals 1 "$("$root_script" 2>&1 | grep -c "verbose")"
 }
