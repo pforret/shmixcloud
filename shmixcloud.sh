@@ -19,7 +19,6 @@ option|l|log_dir|folder for log files |$HOME/log/$script_prefix
 option|o|out_dir|output folder for the m4a/mp3 files (default: derive from URL)|
 option|t|tmp_dir|folder for temp files|.tmp
 option|A|AUDIO|audio format to use|m4a
-option|B|DOWNLOADER|binary to use for downloading|yt-dlp
 option|C|COMMENT|comment metadata for audio file|%c %a
 option|D|DAYS|maximum days to go back|365
 option|F|FONT|font to use for subtitle|Helvetica
@@ -119,7 +118,7 @@ function do_download(){
     not_before=$(calculate_not_before "$DAYS")
     debug "$os_kernel => only consider mixes after $not_before"
     debug "[$temp_json]: download JSON from $1"
-    "$DOWNLOADER" -j --dateafter "$not_before" "$1" > "$temp_json"
+    "yt-dlp" -j --dateafter "$not_before" "$1" > "$temp_json"
   fi
 
   debug "[$temp_json]: $(du -h "$temp_json" | awk '{print $1}')"
@@ -151,7 +150,7 @@ function do_download(){
       if [[ ! -f "$mix_output" ]] ; then
         mix_temp="$tmp_dir/$(basename "$mix_output")"
         debug "> Download: $mix_temp -> $mix_output ..."
-        "$DOWNLOADER" --no-overwrites --no-progress --extract-audio --audio-format "$AUDIO" -o "$mix_temp" "$mix_url" >> "$download_log"
+        "yt-dlp" --no-overwrites --no-progress --extract-audio --audio-format "$AUDIO" -o "$mix_temp" "$mix_url" >> "$download_log"
         mv "$mix_temp" "$mix_output"
       fi
 
