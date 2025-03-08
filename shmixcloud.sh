@@ -93,7 +93,7 @@ function do_download(){
   require_binary curl
   require_binary jq
   require_binary mogrify imagemagick
-  require_binary $DOWNLOADER
+  require_binary "$DOWNLOADER"
   announce "Download $NUMBER mixes from $1"
 
   local username uniq playlist not_before
@@ -354,7 +354,7 @@ progress() {
     local rest_of_line
     rest_of_line=$((screen_width - 5))
 
-    if flag_set ${piped:-0}; then
+    if flag_set "${piped:-0}"; then
       out "$*" >&2
     else
       printf "... %-${rest_of_line}b\r" "$*                                             " >&2
