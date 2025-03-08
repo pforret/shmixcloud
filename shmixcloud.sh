@@ -93,7 +93,8 @@ function do_download(){
   require_binary curl
   require_binary jq
   require_binary mogrify imagemagick
-  require_binary "$DOWNLOADER"
+  require_binary python3
+  require_binary yt-dlp "pip install --upgrade yt-dlp"
   announce "Download $NUMBER mixes from $1"
 
   local username uniq playlist not_before
