@@ -10,18 +10,17 @@
 
 ![shmixcloud](assets/shmixcloud.jpg)
 
-- Download Mixcloud shows to disk to be used on USB stick for e.g. 🚗 (tested on BMW X1 😉)
+- Download MixCloud shows to disk to be used on USB stick for e.g. 🚗 (tested on BMW X1 😉)
 - download N most recent shows (default: 10)
 - add Title, Author, Album, Image to (M4A) audio file
 
 ## 🔥 Usage
 
 ```
-Program: shmixcloud 3.0.3 by peter@forret.com
-Updated: 2023-11-09 11:18                    
+Program: shmixcloud 3.1.0 by peter@forret.com
+Updated: Mar  8 16:45:25 2025
 Description: Download Mixcloud shows to disk to be used in e.g. car
-Usage: shmixcloud [-h] [-q] [-v] [-f] [-f] [-Q] [-l <log_dir>] [-o <out_dir>] [-t <tmp_dir>] [-A <AUDIO>] [-B <DOWNLOADER>] [-C <COMMENT>] [-D <DAYS>] [-F <FONT>] [-G <FONTSIZE>] [-I <FILTER>] [-N <NUMBER>] [-P <PIXELS>] [-S <SUBTITLE>] [-T <TITLE>] <action> <url?
->
+Usage: shmixcloud [-h] [-q] [-v] [-f] [-f] [-Q] [-l <log_dir>] [-o <out_dir>] [-t <tmp_dir>] [-A <AUDIO>] [-C <COMMENT>] [-D <DAYS>] [-F <FONT>] [-G <FONTSIZE>] [-I <FILTER>] [-N <NUMBER>] [-P <PIXELS>] [-S <SUBTITLE>] [-T <TITLE>] <action> <url?>
 Flags, options and parameters:
     -h|--help        : [flag] show usage [default: off]
     -q|--quiet       : [flag] no output [default: off]
@@ -29,11 +28,10 @@ Flags, options and parameters:
     -f|--force       : [flag] do not ask for confirmation (always yes) [default: off]
     -f|--force       : [flag] do not ask for confirmation (always yes) [default: off]
     -Q|--qrcode      : [flag] add QR encode of URL to image [default: off]
-    -l|--log_dir <?> : [option] folder for log files   [default: /home/pforret/log/shmixcloud]
+    -l|--log_dir <?> : [option] folder for log files   [default: /Users/pforret/log/shmixcloud]
     -o|--out_dir <?> : [option] output folder for the m4a/mp3 files (default: derive from URL)
-    -t|--tmp_dir <?> : [option] folder for temp files  [default: /tmp/shmixcloud]
+    -t|--tmp_dir <?> : [option] folder for temp files  [default: .tmp]
     -A|--AUDIO <?>   : [option] audio format to use  [default: m4a]
-    -B|--DOWNLOADER <?>: [option] binary to use for downloading  [default: yt-dlp]
     -C|--COMMENT <?> : [option] comment metadata for audio file  [default: %c %a]
     -D|--DAYS <?>    : [option] maximum days to go back  [default: 365]
     -F|--FONT <?>    : [option] font to use for subtitle  [default: Helvetica]
