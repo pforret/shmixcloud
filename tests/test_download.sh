@@ -18,5 +18,6 @@ root_script=$(find "$root_folder"  -maxdepth 1 -name "*.sh" | head -1) # normall
 test_download_one() {
   # script without parameters should give usage info
   "$root_script" -N 1 -f -v download https://www.mixcloud.com/oldiespopcorn/
-  assert_exists "output/"
+  downloads_found=$(find output -type f | wc -l)
+  assert_equals 1 "$downloads_found"
 }
